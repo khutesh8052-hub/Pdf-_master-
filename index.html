@@ -33,7 +33,7 @@ footer{max-width:980px;margin:0 auto;padding:0 14px 28px;color:var(--muted);font
 <button class="tool" data-tool="split"><span class="emoji">✂️</span><strong>Split PDF</strong><small>Extract page range</small></button>
 <button class="tool" data-tool="compress"><span class="emoji">🗜️</span><strong>Compress PDF</strong><small>Reduce file size</small></button>
 <button class="tool" data-tool="annotate"><span class="emoji">✍️</span><strong>Add text</strong><small>Stamp text on a page</small></button>
-</nav>
+</nav><button class="tool" data-tool="rotate"><span class="emoji">🔄</span><strong>Rotate PDF</strong><small>Rotate PDF pages</small></button>
 <section class="panel">
 <h3 id="toolTitle">Merge PDF files</h3><p class="desc" id="toolDesc">Choose two or more PDFs. They will be joined in the order shown.</p>
 <label class="drop" for="pdfInput"><span class="up">📄</span><strong>Tap to choose PDF file(s)</strong><span>PDF files · Stored locally in your browser</span></label>
@@ -60,6 +60,8 @@ const configs={
  merge:{title:'Merge PDF files',desc:'Choose two or more PDFs. They will be joined in the order shown.',button:'Merge PDFs & download'},
  split:{title:'Split / extract PDF pages',desc:'Choose one PDF and enter the page range to extract. Page numbers start at 1.',button:'Extract pages & download'},
  compress:{title:'Compress PDF',desc:'Creates a smaller image-based PDF. This can reduce size significantly, but selectable text and links will not be preserved.',button:'Compress & download'},
+  rotate:{title:'Rotate PDF pages',desc:'Choose a PDF and rotate its pages.',button:'Rotate PDF & download'},
+ pdfword:{title:'PDF to Word',desc:'Convert a PDF into an editable Word document.',button:'Convert to Word & download'},
  annotate:{title:'Add text to PDF',desc:'Place a text note on one page. Page numbering starts at 1; coordinates are measured from the top-left.',button:'Add text & download'}
 };
 function setStatus(msg,type='info'){status.textContent=msg;status.className='status show '+type}
@@ -74,8 +76,8 @@ function renderFields(){
  const pageField='<div class="field"><label for="pageRange">Page range</label><input id="pageRange" value="1-1" placeholder="e.g. 1-3,5" inputmode="text"></div>';
  const quality='<div class="field full"><label for="quality">Image quality (lower = smaller file)</label><select id="quality"><option value="0.55">Small file · lower quality</option><option value="0.72" selected>Balanced</option><option value="0.88">Higher quality · larger file</option></select></div>';
  const annotation='<div class="fields"><div class="field"><label for="annoPage">Page number</label><input id="annoPage" type="number" min="1" value="1" inputmode="numeric"></div><div class="field"><label for="fontSize">Font size</label><input id="fontSize" type="number" min="6" max="72" value="18" inputmode="numeric"></div><div class="field full"><label for="annoText">Text to add</label><textarea id="annoText" placeholder="Type your note or label"></textarea></div><div class="field"><label for="xPos">Left position (pt)</label><input id="xPos" type="number" min="0" value="40" inputmode="numeric"></div><div class="field"><label for="yPos">Top position (pt)</label><input id="yPos" type="number" min="0" value="60" inputmode="numeric"></div></div><p class="desc">Position is approximate; PDF points are used (72 points = 1 inch).</p>';
- fields.innerHTML=tool==='split'?'<div class="fields">'+pageField+'</div>':tool==='compress'?'<div class="fields">'+quality+'</div>':tool==='annotate'?annotation:'';
-}
+ 
+}fields.innerHTML=tool==='split'?'<div class="fields">'+pageField+'</div>':tool==='compress'?'<div class="fields">'+quality+'</div>':tool==='annotate'?annotation:tool==='rotate'?'<div class="fields"><div class="field"><label for="rotation">Rotation</label><select id="rotation"><option value="90">90° clockwise</option><option value="180">180°</option><option value="270">270° clockwise</option></select></div></div>':'';
 function setTool(next){
  tool=next;document.querySelectorAll('.tool').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));
  $('toolTitle').textContent=configs[tool].title;$('toolDesc').textContent=configs[tool].desc;runBtn.textContent=configs[tool].button;
@@ -129,7 +131,17 @@ async function annotate(){
  const font=await pdf.embedFont(PDFLib.StandardFonts.Helvetica);
  page.drawText(text,{x,y:height-top-size,size,font,color:PDFLib.rgb(0.15,0.12,0.55),maxWidth:Math.max(10,width-x-10)});
  download(await pdf.save(),'pdf-master-annotated.pdf');setStatus('Done! Text added and PDF download ho raha hai.','ok');
-}
+}async function rotate(){
+ if(files.length!==1)throw Error('Rotate ke liye ek PDF chuno.');
+ const pdf=await PDFLib.PDFDocument.load(await files[0].arrayBuffer());
+ const angle=Number($('rotation').value);
+ if(![90,180,270].includes(angle))throw Error('Rotation 90, 180 ya 270 hona chahiye.');
+ pdf.getPages().forEach(page=>{
+  page.setRotation(PDFLib.degrees((page.getRotation().angle+angle)%360));
+ });
+ download(await pdf.save(),'pdf-master-rotated.pdf');
+ setStatus('Done! Rotated PDF download ho rahi hai.','ok');
+ }
 async function compress(){
  if(files.length<1)throw Error('Compress karne ke liye ek PDF chuno.');
  if(!window.pdfjsLib||!window.jspdf)throw Error('Compression libraries load nahi hui. Internet connection check karke page reload karo.');
@@ -157,7 +169,13 @@ runBtn.addEventListener('click',async()=>{
  clearStatus();if(!files.length){setStatus('Pehle PDF file choose karo.','err');return}
  if(!window.PDFLib){setStatus('PDF library load nahi hui. Internet connection check karke page reload karo.','err');return}
  runBtn.disabled=true;
- try{if(tool==='merge')await merge();else if(tool==='split')await split();else if(tool==='annotate')await annotate();else await compress()}
+ try{
+ if(tool==='merge')await merge();
+ else if(tool==='split')await split();
+ else if(tool==='annotate')await annotate();
+ else if(tool==='rotate')await rotate();
+ else await compress();
+ }
  catch(e){console.error(e);setStatus('Error: '+(e&&e.message?e.message:String(e)),'err')}
  finally{runBtn.disabled=false}
 });
